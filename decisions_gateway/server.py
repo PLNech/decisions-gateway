@@ -162,6 +162,7 @@ class Handler(BaseHTTPRequestHandler):
     sys_version = ""
     protocol_version = "HTTP/1.1"
     timeout = 30  # client socket: bounds slow senders
+    pending: tuple[Record, float] | None = None  # the proxied request awaiting accounting
 
     def log_message(self, format, *args):  # noqa: A002 - stdlib signature
         """Silenced: the stdlib access log prints request lines and paths."""
@@ -177,6 +178,7 @@ class Handler(BaseHTTPRequestHandler):
         return self.server.gateway
 
     def send(self, status: int, body: bytes, headers: dict[str, str] | None = None, close: bool = False) -> None:
+        self.account(status)
         headers = {"Content-Type": "application/json", **(headers or {})}
         self.send_response(status)
         for k, v in headers.items():
@@ -190,6 +192,29 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def account(self, status: int) -> None:
+        """Record and log a proxied request just before its response is written.
+
+        Accounting first means a client that reads /metrics or /v1/stats after a response always finds it counted.
+        """
+        pending, self.pending = self.pending, None
+        if pending is None:
+            return
+        rec, t0 = pending
+        rec.total_ms = rec.total_ms or (time.monotonic() - t0) * 1000
+        self.gw.metrics.record(rec)
+        log.info(
+            "ts=%s client=%s backend=%s status=%d n_questions=%d total_ms=%s queue_ms=%s inference_ms=%s",
+            time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            rec.client,
+            rec.backend,
+            status,
+            rec.n_questions,
+            _ms(rec.total_ms),
+            _ms(rec.queue_ms),
+            _ms(rec.inference_ms),
+        )
+
     def dispatch(self, method: str) -> None:
         t0 = time.monotonic()
         url = urlsplit(self.path)
@@ -197,8 +222,9 @@ class Handler(BaseHTTPRequestHandler):
             (method == "POST" and PROXY_PATH.match(url.path)) or (method == "GET" and url.path in PROXY_GET_PATHS)
         )
         rec = Record(minute=int(time.time() // 60), client="unauthenticated", backend=self.gw.cfg.default_backend)
+        self.pending = (rec, t0) if is_proxy else None
         try:
-            status = self.route(method, url, is_proxy, rec, t0)
+            self.route(method, url, is_proxy, rec, t0)
         except Reject as exc:
             status = exc.status
             rec.outcome, rec.reason = "rejected" if exc.reason else "backend_error", exc.reason
@@ -207,20 +233,6 @@ class Handler(BaseHTTPRequestHandler):
                 headers["WWW-Authenticate"] = "Bearer"
             # an unread request body would poison keep-alive: close after early rejections
             self.send(status, envelope(status, exc.message), headers, close=not rec.body_read and method == "POST")
-        if is_proxy:
-            rec.total_ms = rec.total_ms or (time.monotonic() - t0) * 1000
-            self.gw.metrics.record(rec)
-            log.info(
-                "ts=%s client=%s backend=%s status=%d n_questions=%d total_ms=%s queue_ms=%s inference_ms=%s",
-                time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                rec.client,
-                rec.backend,
-                status,
-                rec.n_questions,
-                _ms(rec.total_ms),
-                _ms(rec.queue_ms),
-                _ms(rec.inference_ms),
-            )
 
     def route(self, method: str, url, is_proxy: bool, rec: Record, t0: float) -> int:
         """Handle one request and return the HTTP status sent, or raise Reject."""
