@@ -1,0 +1,57 @@
+# decisions-gateway configuration. Every key is optional; the values below are the defaults.
+# Default location: ~/.config/decisions-gateway/config.toml (or pass --config PATH).
+# Unknown keys are an error, so a typo fails at startup instead of being ignored.
+
+# Listener. The gateway accepts only Host headers naming 127.0.0.1:<port> or localhost:<port>.
+listen_host = "127.0.0.1"
+listen_port = 8017            # --port overrides it
+
+# Backend that every request goes to. Must name a [backends.<name>] table below.
+default_backend = "default"
+
+log_level = "INFO"            # DEBUG, INFO, WARNING, ERROR
+
+# The key clients present as "Authorization: Bearer <key>". The file holds KEY=value lines (an "export "
+# prefix and quotes are accepted); only the line named by key_var is read. Keep it mode 600.
+# The environment variable DECISIONS_GATEWAY_KEY_FILE, when set and non-empty, overrides key_file.
+key_file = "~/.config/decisions-gateway/key.env"
+key_var = "DECISIONS_GATEWAY_API_KEY"
+
+# Backend timeouts, in seconds. read_timeout_s also caps X-Decision-Deadline-Ms.
+connect_timeout_s = 2.0
+read_timeout_s = 120.0
+
+# Request caps, checked before anything is forwarded.
+max_body_bytes = 262144       # 413 above this Content-Length
+max_questions = 32            # 400 above this many questions in one request
+max_options = 26              # 400 above this many options in one choice or score question
+max_budget = 256              # 400 above this many questions x options in total (a noul question counts 2)
+
+# Admission control.
+backend_max_in_flight = 8     # requests in flight per backend; more get 503 + Retry-After
+client_max_in_flight = 4      # concurrent requests per client label; more get 429 + Retry-After
+retry_after_s = 1             # value of the Retry-After header on 429, 502 and 503
+
+# Per-minute aggregates: kept in memory for ring_minutes, flushed to SQLite every flush_interval_s.
+state_dir = "~/.local/state/decisions-gateway"   # created mode 700, holds metrics.db (mode 600)
+flush_interval_s = 60.0       # also the backend health probe interval
+ring_minutes = 10080          # 7 days in memory, feeds /v1/stats
+retention_days = 30           # rows older than this are deleted at each flush
+max_rows = 500000             # hard row cap on disk; oldest minutes go first
+
+# Label allow-lists. Labels reach /metrics, /v1/stats and SQLite, so only these values become labels.
+# X-Decision-Client: absent means "unknown", a listed name (lowercased, [a-z0-9._-] kept) is its own
+# label, anything else is "other". The body "model" field works the same way against known_models;
+# with the default empty list every model counts as "other".
+label_cap = 16                # max entries in each allow-list
+known_clients = []            # for example ["bench", "batch-labeller"]
+known_models = []             # for example ["model-a"]
+
+# Backends. Each table is one model server reached over plain HTTP. host is a hostname or IPv4 address
+# (keep it on loopback: the Bearer key travels in clear), port is required.
+# By default the gateway presents its own key to the backend; set key_file and/or key_var to use another.
+[backends.default]
+host = "127.0.0.1"
+port = 8117
+# key_file = "~/.config/decisions-gateway/backend.env"
+# key_var = "BACKEND_API_KEY"

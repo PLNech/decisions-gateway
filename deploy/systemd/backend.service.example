@@ -1,0 +1,82 @@
+# Example: a typed-decision model server as a hardened SYSTEM unit on 127.0.0.1:8117, behind decisions-gateway.
+#
+# This is an example for your own server, not something the project ships. Rename it (for example
+# model-server.service), adapt ExecStart= to your server's command line, then replace the placeholders,
+# by hand or with deploy/render-units.sh (see deploy/INSTALL.md):
+#   @USER@ @GROUP@  account the server runs as
+#   @HOME@          that account's home directory
+#   @BACKEND_DIR@   absolute path of the server program (read-only inside the sandbox)
+#   @MODEL_DIR@     absolute path of the model weights (read-only inside the sandbox)
+#
+# The gateway expects the server to answer GET /health without auth (JSON with optional "status", "model"
+# and "fingerprint" fields) and POST /v1/systemone with a Bearer key.
+
+[Unit]
+Description=model server for decisions-gateway on 127.0.0.1:8117
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=@USER@
+Group=@GROUP@
+WorkingDirectory=@BACKEND_DIR@
+ExecStart=@BACKEND_DIR@/serve --host 127.0.0.1 --port 8117 --model-dir @MODEL_DIR@
+# The key the server checks. Read by PID 1 before the sandbox is set up, so ProtectHome= below does not
+# hide it. By default the gateway presents its own key, so this can be the gateway's key file; the server
+# must then read the key from DECISIONS_GATEWAY_API_KEY (or set key_file / key_var per backend in the
+# gateway config). The leading "-" tolerates a missing file, for servers without auth.
+EnvironmentFile=-@HOME@/.config/decisions-gateway/key.env
+Restart=on-failure
+RestartSec=3
+
+# CPU: lower priority than interactive work, and a hard ceiling. On a laptop, a CPU inference server
+# under a sustained batch pins every core, the machine heats up, the firmware throttles the clock and
+# everything else on the machine slows down too (fans, input lag). CPUQuota= caps the server at a fixed
+# share (300% = three cores' worth) so sustained load stays below the throttling point; Nice= and
+# CPUWeight= only matter under contention and do not cap heat. Size it to your machine.
+Nice=5
+CPUWeight=50
+CPUQuota=300%
+MemoryMax=4G
+
+# Network: loopback only, enforced by BPF. A model server needs no egress: no telemetry, no downloads at
+# start. Fetch weights before installing the unit.
+IPAddressDeny=any
+IPAddressAllow=localhost
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# Filesystem: an empty home (tmpfs) except the program and the weights, both read-only. Caches that
+# runtimes write under $HOME land in the tmpfs and vanish on stop. ProtectSystem=strict makes the rest
+# of the tree read-only.
+ProtectHome=tmpfs
+BindReadOnlyPaths=@BACKEND_DIR@
+BindReadOnlyPaths=@MODEL_DIR@
+ProtectSystem=strict
+PrivateTmp=yes
+PrivateDevices=yes
+UMask=0077
+
+# Kernel and process surface. No MemoryDenyWriteExecute=: many inference runtimes JIT-compile kernels
+# and need writable executable memory. Add it back if yours does not.
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+LimitCORE=0
+
+[Install]
+WantedBy=multi-user.target

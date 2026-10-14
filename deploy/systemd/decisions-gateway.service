@@ -1,0 +1,79 @@
+# decisions-gateway as a hardened SYSTEM unit that runs as an ordinary user.
+#
+# This file is a template. Replace the placeholders before installing, by hand or with
+# deploy/render-units.sh (see deploy/INSTALL.md):
+#   @USER@ @GROUP@  account the gateway runs as (owns the key file, config and state dir)
+#   @HOME@          that account's home directory
+#   @PREFIX@        absolute path of the checked-out project (the directory holding decisions_gateway/)
+#
+# Why a system unit and not a user unit: on many distributions user units silently ignore the namespace
+# and IP options below (unprivileged user namespaces are restricted), so the sandbox would not be enforced.
+# Check the result with: systemd-analyze security decisions-gateway
+
+[Unit]
+Description=decisions-gateway (auth, caps, admission, metrics) on 127.0.0.1:8017
+After=network.target
+# If the backend runs as a unit on the same host, order after it, for example:
+# After=network.target model-server.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=@USER@
+Group=@GROUP@
+WorkingDirectory=@PREFIX@
+# The runtime is the Python standard library only, so the system interpreter is enough (no venv).
+# -s: ignore user site-packages. -B: write no bytecode (the project dir is read-only below).
+# The config file is optional: @HOME@/.config/decisions-gateway/config.toml, defaults in code.
+ExecStart=/usr/bin/python3 -s -B -m decisions_gateway --host 127.0.0.1 --port 8017
+# To keep the key file somewhere else, point the gateway at it and add a BindReadOnlyPaths= for its directory:
+# Environment=DECISIONS_GATEWAY_KEY_FILE=/path/to/key.env
+Restart=on-failure
+RestartSec=3
+# Resource ceilings: the gateway is small; these bound a runaway, they are not tuning knobs.
+MemoryMax=256M
+TasksMax=256
+
+# Network: loopback only, enforced by BPF. The gateway listens on and talks to 127.0.0.1, nothing else.
+IPAddressDeny=any
+IPAddressAllow=localhost
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# Filesystem: an empty home except what the gateway needs. The project and the config/key dir are
+# read-only; only the state dir (SQLite aggregates) is writable. The state dir must exist before start
+# (BindPaths= fails on a missing source). Everything outside /home, /dev, /proc and /sys is read-only.
+ProtectHome=tmpfs
+BindReadOnlyPaths=@PREFIX@
+BindReadOnlyPaths=@HOME@/.config/decisions-gateway
+BindPaths=@HOME@/.local/state/decisions-gateway
+ProtectSystem=strict
+PrivateTmp=yes
+PrivateDevices=yes
+# Files the gateway creates are private to its user (it also sets 0700/0600 itself).
+UMask=0077
+
+# Kernel and process surface: no privilege gain, no executable memory, no kernel or clock tweaks,
+# other processes invisible, syscalls limited to the ordinary service set.
+NoNewPrivileges=yes
+MemoryDenyWriteExecute=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# No capabilities at all, and no core dumps (a core could hold a key or request bytes).
+CapabilityBoundingSet=
+LimitCORE=0
+
+[Install]
+WantedBy=multi-user.target
