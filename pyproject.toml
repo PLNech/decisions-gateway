@@ -1,0 +1,45 @@
+[project]
+name = "decisions-gateway"
+version = "0.1.0"
+description = "Local HTTP gateway with auth, caps, admission control and privacy-safe metrics for typed-decision model servers"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Paul-Louis Nech" }]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: No Input/Output (Daemon)",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: Proxy Servers",
+]
+
+[project.scripts]
+decisions-gateway = "decisions_gateway.server:main"
+
+[tool.poetry]
+packages = [{ include = "decisions_gateway" }]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+ruff = "^0.14"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[build-system]
+requires = ["poetry-core>=2.0.0"]
+build-backend = "poetry.core.masonry.api"
