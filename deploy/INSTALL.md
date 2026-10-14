@@ -36,9 +36,18 @@ install -m 600 deploy/config.example.toml ~/.config/decisions-gateway/config.tom
 Clients present the same key as `Authorization: Bearer <key>`. By default the gateway also presents it to the
 backend; to use a separate backend key, set `key_file` and `key_var` under `[backends.<name>]`.
 
-The key file can live elsewhere: set `key_file` in the config, or `DECISIONS_GATEWAY_KEY_FILE` in the
-environment. Under systemd, add `Environment=DECISIONS_GATEWAY_KEY_FILE=...` and a `BindReadOnlyPaths=` for
-its directory, since the unit hides the rest of the home directory.
+**Under systemd, every key file must live in `~/.config/decisions-gateway/`**, the gateway's own key and any
+per-backend `key_file` alike. The unit hides the home directory (`ProtectHome=tmpfs`) and binds back only that
+directory, the project and the state directory, so a key file anywhere else under the home directory is
+invisible to the gateway and it fails at start with `cannot read key file`. Copy such a file in:
+
+```bash
+install -m 600 /path/to/backend.env ~/.config/decisions-gateway/backend.env
+```
+
+then set `key_file = "~/.config/decisions-gateway/backend.env"` for that backend. `key_file` and
+`DECISIONS_GATEWAY_KEY_FILE` can point elsewhere when the gateway runs outside the unit, or if you also add a
+`BindReadOnlyPaths=` line for that directory to the unit.
 
 ## 2. Pre-checks
 
@@ -75,8 +84,9 @@ Go to step 5.
 ## 4. Cutover: the model server owns :8017 today
 
 The goal is to move the server to `:8117` and put the gateway on `:8017`. Clients keep the same URL and key
-if the server's key becomes the gateway's key: point `key_file` and `key_var` in the gateway config at the
-file the server already reads, and bind its directory read-only in the gateway unit.
+if the server's key becomes the gateway's key: copy the file the server already reads into
+`~/.config/decisions-gateway/` (mode 600, see step 1) and point `key_file` and `key_var` in the gateway config
+at the copy.
 
 ```bash
 # 1. Make the server listen on 8117: edit its unit (or render backend.service.example with port 8117).

@@ -11,6 +11,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - A failure while recording or logging a proxied request no longer drops the response: it is logged by
   exception class only and the client still gets its answer.
+- Document that under the systemd unit every key file, including a per-backend `key_file`, must live in
+  `~/.config/decisions-gateway/`: the unit hides the rest of the home directory.
 
 ## [0.1.0] - 2026-10-14
 

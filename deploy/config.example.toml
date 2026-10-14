@@ -14,6 +14,8 @@ log_level = "INFO"            # DEBUG, INFO, WARNING, ERROR
 # The key clients present as "Authorization: Bearer <key>". The file holds KEY=value lines (an "export "
 # prefix and quotes are accepted); only the line named by key_var is read. Keep it mode 600.
 # The environment variable DECISIONS_GATEWAY_KEY_FILE, when set and non-empty, overrides key_file.
+# Under the systemd unit, every key file (this one and any backend key_file) must live in
+# ~/.config/decisions-gateway/: the unit hides the rest of the home directory (see deploy/INSTALL.md).
 key_file = "~/.config/decisions-gateway/key.env"
 key_var = "DECISIONS_GATEWAY_API_KEY"
 
@@ -50,6 +52,8 @@ known_models = []             # for example ["model-a"]
 # Backends. Each table is one model server reached over plain HTTP. host is a hostname or IPv4 address
 # (keep it on loopback: the Bearer key travels in clear), port is required.
 # By default the gateway presents its own key to the backend; set key_file and/or key_var to use another.
+# Under the systemd unit, a backend key_file must also live in ~/.config/decisions-gateway/, or the gateway
+# fails at start with "cannot read key file".
 [backends.default]
 host = "127.0.0.1"
 port = 8117
