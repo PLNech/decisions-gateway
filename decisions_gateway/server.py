@@ -196,24 +196,29 @@ class Handler(BaseHTTPRequestHandler):
         """Record and log a proxied request just before its response is written.
 
         Accounting first means a client that reads /metrics or /v1/stats after a response always finds it counted.
+        A failure here is logged by exception class only (its message could hold request text) and never stops
+        the response.
         """
         pending, self.pending = self.pending, None
         if pending is None:
             return
         rec, t0 = pending
-        rec.total_ms = rec.total_ms or (time.monotonic() - t0) * 1000
-        self.gw.metrics.record(rec)
-        log.info(
-            "ts=%s client=%s backend=%s status=%d n_questions=%d total_ms=%s queue_ms=%s inference_ms=%s",
-            time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            rec.client,
-            rec.backend,
-            status,
-            rec.n_questions,
-            _ms(rec.total_ms),
-            _ms(rec.queue_ms),
-            _ms(rec.inference_ms),
-        )
+        try:
+            rec.total_ms = rec.total_ms or (time.monotonic() - t0) * 1000
+            self.gw.metrics.record(rec)
+            log.info(
+                "ts=%s client=%s backend=%s status=%d n_questions=%d total_ms=%s queue_ms=%s inference_ms=%s",
+                time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                rec.client,
+                rec.backend,
+                status,
+                rec.n_questions,
+                _ms(rec.total_ms),
+                _ms(rec.queue_ms),
+                _ms(rec.inference_ms),
+            )
+        except Exception as exc:  # the response must go out even if accounting breaks
+            log.error("accounting failed: %s", type(exc).__name__)
 
     def dispatch(self, method: str) -> None:
         t0 = time.monotonic()
