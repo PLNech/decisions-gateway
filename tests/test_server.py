@@ -231,3 +231,21 @@ def test_env_key_file_override_end_to_end(tmp_path, monkeypatch):
         server.shutdown()
         server.server_close()
         fake.stop()
+
+
+def test_accounting_failure_never_blocks_the_response(make_gateway, capfd):
+    canary = "zq-canary-5519"
+    client, gw, fake, buf = make_gateway()
+
+    def broken_record(rec):
+        raise RuntimeError(f"cannot record {canary}")
+
+    gw.metrics.record = broken_record
+    body = decision() | {"state": canary}
+    status, _, doc = client.json("POST", "/v1/systemone", body=body)
+    assert status == 200 and doc == {"model": "fake-v1", "answers": {"q0": {"type": "noul", "noul": 0.5}}}
+    status, _, doc = client.json("POST", "/v1/systemone", body=body, auth=False)  # gateway rejections too
+    assert status == 401 and doc["error"]["code"] == 401
+    assert buf.getvalue().count("accounting failed: RuntimeError") == 2
+    out, err = capfd.readouterr()
+    assert canary not in buf.getvalue() and canary not in out and canary not in err
