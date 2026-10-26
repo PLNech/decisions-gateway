@@ -1,7 +1,9 @@
 # Install, cutover and rollback
 
-This runbook installs decisions-gateway as a hardened system unit on `127.0.0.1:8017`, in front of a model
-server on `127.0.0.1:8117`. It covers two cases:
+This runbook installs decisions-gateway on `127.0.0.1:8017`, in front of a model server on `127.0.0.1:8117`:
+as a hardened systemd system unit on Linux (sections 0 to 5), or as a launchd user agent on macOS (section
+[macOS](#macos-launchd)). Key, config, checks and client-visible behaviour are the same on both. It covers two
+cases:
 
 - a fresh install, where nothing listens on `:8017` yet;
 - a cutover, where the model server itself listens on `:8017` today and clients must keep that URL.
@@ -10,7 +12,8 @@ Commands that need root are marked with `sudo`. Everything else runs as the acco
 
 ## 0. Prerequisites
 
-- Linux with systemd (tested with systemd 255), Python 3.11 or later at `/usr/bin/python3`.
+- Linux with systemd (tested with systemd 255), Python 3.11 or later at `/usr/bin/python3`; or macOS (tested
+  on macOS 26, Apple Silicon) with any Python 3.11 or later: the system `/usr/bin/python3` is too old there.
 - A model server that answers `POST /v1/systemone` with a Bearer key and `GET /health` without one.
 - The project checked out somewhere stable. Below, `PREFIX` is its absolute path:
 
@@ -170,6 +173,44 @@ A `CPUQuota=` applied with `systemctl set-property` lives in a drop-in and survi
 `systemctl show model-server -p CPUQuotaPerSecUSec`.
 
 The state directory holds only aggregates; delete it if you no longer want them.
+
+## macOS (launchd)
+
+Steps 1 (key, config, state directory) and 5 (checks) are the same. Instead of steps 2 to 4:
+
+```bash
+install -d -m 700 ~/Library/Logs/decisions-gateway
+PY=$(command -v python3.13)              # any Python 3.11+, e.g. Homebrew or `uv python find 3.13`
+mkdir -p /tmp/dg-agents
+PYTHON=$PY deploy/render-launchd.sh /tmp/dg-agents
+plutil -lint /tmp/dg-agents/decisions-gateway.plist
+
+install -m 644 /tmp/dg-agents/decisions-gateway.plist ~/Library/LaunchAgents/decisions-gateway.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/decisions-gateway.plist
+tail -n 2 ~/Library/Logs/decisions-gateway/gateway.log
+# expect: listening on 127.0.0.1:8017, default backend default at 127.0.0.1:8117
+```
+
+- It is a user agent: it runs in your login session, starts at login (`RunAtLoad`) and restarts after a crash
+  or a non-zero exit (`KeepAlive` with `SuccessfulExit` false). No `sudo` anywhere. A GPU model server must be
+  a user agent too: launchd daemons outside the login session do not get the GPU.
+- Logs go to `~/Library/Logs/decisions-gateway/` (mode 600 through `Umask`): labels, status codes, counts and
+  durations, never request text. In step 5 read them instead of `journalctl`.
+- `deploy/launchd/backend.plist.example` is the backend counterpart; render it with
+  `BACKEND_DIR=... MODEL_DIR=...` like the systemd example. launchd has no `EnvironmentFile`, so a server that
+  checks the key reads `~/.config/decisions-gateway/key.env` itself.
+- Restart: `launchctl kickstart -k gui/$(id -u)/decisions-gateway`. Status:
+  `launchctl print gui/$(id -u)/decisions-gateway | grep -E 'state|pid|runs'`.
+- No sandbox: launchd has nothing like the systemd unit's BPF network policy, hidden home and syscall filter
+  (`sandbox-exec` is deprecated). The gateway's own protections (loopback bind, `Host` check, Bearer key,
+  caps, privacy guarantees) are the whole defence on macOS.
+
+Rollback:
+
+```bash
+launchctl bootout gui/$(id -u)/decisions-gateway
+rm ~/Library/LaunchAgents/decisions-gateway.plist
+```
 
 ## Behaviour changes clients may notice after a cutover
 
