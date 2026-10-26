@@ -2,11 +2,11 @@
 <!--
   Example: a typed-decision model server as a launchd user agent on 127.0.0.1:8117, behind decisions-gateway
   (the counterpart of deploy/systemd/backend.service.example). This is an example for your own server, not
-  something the project ships: adapt ProgramArguments to your server's command line, then replace the
-  placeholders, by hand or with deploy/render-launchd.sh:
-    @HOME@         the account's home directory
-    @BACKEND_DIR@  absolute path of the server program
-    @MODEL_DIR@    absolute path of the model weights
+  something the project ships: adapt ProgramArguments to your server's command line, then fill in these
+  placeholders below this comment, by hand or with deploy/render-launchd.sh:
+    HOME         the account's home directory
+    BACKEND_DIR  absolute path of the server program
+    MODEL_DIR    absolute path of the model weights
 
   The gateway expects the server to answer GET /health without auth (JSON with optional "status", "model"
   and "fingerprint" fields) and POST /v1/systemone with a Bearer key. By default the gateway presents its own

@@ -76,6 +76,20 @@ def test_rendered_launchd_agents_are_valid_plists(tmp_path):
             assert subprocess.run(["plutil", "-lint", str(out / name)], capture_output=True).returncode == 0
 
 
+def test_rendered_launchd_agents_survive_double_dash_paths(tmp_path):
+    # Poetry venv names can hold "--", which XML forbids inside comments.
+    import plistlib
+    import sys
+
+    odd = tmp_path / "venv--x" / "bin"
+    odd.mkdir(parents=True)
+    (odd / "python3").symlink_to(sys.executable)
+    done, out = render_launchd(tmp_path, PYTHON=str(odd / "python3"), DG_HOME=str(tmp_path / "home--y"))
+    assert done.returncode == 0, done.stderr
+    for name in ("decisions-gateway.plist", "backend.plist"):
+        plistlib.loads((out / name).read_bytes())
+
+
 def test_render_launchd_refuses_unsafe_values(tmp_path):
     done, _ = render_launchd(tmp_path, BACKEND_DIR="/opt/a&b")
     assert done.returncode == 65 and "BACKEND_DIR" in done.stderr

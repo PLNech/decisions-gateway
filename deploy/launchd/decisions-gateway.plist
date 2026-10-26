@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   decisions-gateway as a macOS launchd user agent on 127.0.0.1:8017 (the counterpart of
-  deploy/systemd/decisions-gateway.service). Render with deploy/render-launchd.sh, which replaces:
-    @PYTHON@  absolute path of a Python 3.11 or later
-    @PREFIX@  absolute path of this checkout
-    @HOME@    the account's home directory
+  deploy/systemd/decisions-gateway.service). Render with deploy/render-launchd.sh, which fills in these
+  placeholders below this comment (comments keep plain names: XML forbids a double dash there, and paths may hold one):
+    PYTHON  absolute path of a Python 3.11 or later
+    PREFIX  absolute path of this checkout
+    HOME    the account's home directory
   then copy to ~/Library/LaunchAgents/ (see deploy/INSTALL.md, "macOS").
 
   launchd has no counterpart to the systemd sandbox (BPF network policy, hidden home, syscall filter):
