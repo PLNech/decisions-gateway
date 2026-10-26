@@ -17,12 +17,13 @@ env:
 
 jobs:
   test:
-    name: Tests (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    name: Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest]
         python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -66,3 +67,22 @@ jobs:
           for unit in decisions-gateway backend; do
             systemd-analyze security --offline=yes "$RUNNER_TEMP/units/$unit.service" | tail -1
           done
+
+  launchd:
+    name: launchd agents
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Render the templates
+        run: |
+          stub="$RUNNER_TEMP/model-server"
+          mkdir -p "$stub/models"
+          PYTHON="$(command -v python3)" BACKEND_DIR="$stub" deploy/render-launchd.sh "$RUNNER_TEMP/agents"
+      - name: Lint the rendered agents
+        run: plutil -lint "$RUNNER_TEMP/agents/decisions-gateway.plist" "$RUNNER_TEMP/agents/backend.plist"
