@@ -1,8 +1,8 @@
 name: CI
 
+# Every branch push runs CI, so a branch can be checked before it is merged straight into main.
 on:
   push:
-    branches: [main]
   pull_request:
 
 permissions:
