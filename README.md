@@ -5,6 +5,7 @@ requests to a backend on another loopback port, and adds authentication, request
 control and observability that never stores request or response text.
 
 The runtime is the Python standard library only (Python 3.11 or later). There are no runtime dependencies.
+It runs on Linux and macOS, tested on both in CI; deploy files ship for systemd (Linux) and launchd (macOS).
 
 ## Why
 
@@ -31,8 +32,9 @@ poetry run pytest -q
 
 With no config file the gateway listens on `127.0.0.1:8017` and forwards to one backend named `default` at
 `127.0.0.1:8117`. Copy [`deploy/config.example.toml`](deploy/config.example.toml) to
-`~/.config/decisions-gateway/config.toml` to change anything. For a hardened systemd install, a cutover from a
-server that already owns the port, and rollback, see [`deploy/INSTALL.md`](deploy/INSTALL.md).
+`~/.config/decisions-gateway/config.toml` to change anything. For a hardened systemd install on Linux, a launchd
+user agent on macOS, a cutover from a server that already owns the port, and rollback, see
+[`deploy/INSTALL.md`](deploy/INSTALL.md).
 
 Command line:
 
@@ -219,9 +221,11 @@ rows, so an empty file cannot pass by accident.
   file in-process, never taken from argv.
 - **Resource bounds.** Body size, question and option caps, a client socket timeout, backend timeouts and
   admission limits bound what one request or one client can cost.
-- **Sandbox.** The systemd template runs the gateway with a loopback-only BPF network policy, a hidden home
-  except the project, config and state directories, a read-only system, no capabilities and a syscall filter
-  (`systemd-analyze security` rates it 1.4, OK).
+- **Sandbox (Linux).** The systemd template runs the gateway with a loopback-only BPF network policy, a hidden
+  home except the project, config and state directories, a read-only system, no capabilities and a syscall
+  filter (`systemd-analyze security` rates it 1.4, OK).
+- **No sandbox (macOS).** The launchd agent has no counterpart to that sandbox: it sets a 0077 umask and no core
+  dumps, and the protections above are the whole defence.
 
 Report vulnerabilities as described in [`SECURITY.md`](SECURITY.md).
 
