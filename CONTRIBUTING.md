@@ -13,8 +13,9 @@ Issues and pull requests are welcome.
 
 - Changes to labels, logging, the store or error messages must keep `tests/test_privacy.py` green without
   weakening it. New label values come from config allow-lists or closed enums, never from request text.
-- Changes to the systemd templates must pass `systemd-analyze verify` after `deploy/render-units.sh`, as CI
-  does.
+- Changes to the systemd templates must pass `systemd-analyze verify` after `deploy/render-units.sh`, and
+  changes to the launchd templates `plutil -lint` after `deploy/render-launchd.sh`, as CI does. Keep the two
+  deploy flavours in step: a setting added to one gets its counterpart, or a comment saying there is none.
 - New config keys go in `decisions_gateway/config.py`, `deploy/config.example.toml` and the README table.
 - One logical change per commit, with a short imperative message. Add a line under `Unreleased` in
   `CHANGELOG.md` for anything a user would notice.

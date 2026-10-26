@@ -7,6 +7,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- macOS support: launchd user agent templates (`deploy/launchd/`), `deploy/render-launchd.sh` and a macOS
+  section in `deploy/INSTALL.md`. CI runs the tests on macOS too and lints the rendered agents with `plutil`.
+
 ### Fixed
 
 - A failure while recording or logging a proxied request no longer drops the response: it is logged by
