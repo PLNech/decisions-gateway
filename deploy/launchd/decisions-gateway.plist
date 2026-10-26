@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  decisions-gateway as a macOS launchd user agent on 127.0.0.1:8017 (the counterpart of
+  deploy/systemd/decisions-gateway.service). Render with deploy/render-launchd.sh, which replaces:
+    @PYTHON@  absolute path of a Python 3.11 or later
+    @PREFIX@  absolute path of this checkout
+    @HOME@    the account's home directory
+  then copy to ~/Library/LaunchAgents/ (see deploy/INSTALL.md, "macOS").
+
+  launchd has no counterpart to the systemd sandbox (BPF network policy, hidden home, syscall filter):
+  the gateway relies on its own loopback bind, Host check and Bearer key here. Logs carry labels, status
+  codes, counts and durations only, never request or response text.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>decisions-gateway</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@PYTHON@</string>
+    <string>-s</string>
+    <string>-B</string>
+    <string>-m</string>
+    <string>decisions_gateway</string>
+    <string>--host</string>
+    <string>127.0.0.1</string>
+    <string>--port</string>
+    <string>8017</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>@PREFIX@</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <!-- Restart after a crash or a non-zero exit, as Restart=on-failure; ThrottleInterval spaces restarts. -->
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>ThrottleInterval</key>
+  <integer>3</integer>
+  <key>ProcessType</key>
+  <string>Standard</string>
+  <!-- 63 is 0077: state and log files readable by the owner only. -->
+  <key>Umask</key>
+  <integer>63</integer>
+  <key>SoftResourceLimits</key>
+  <dict>
+    <key>Core</key>
+    <integer>0</integer>
+  </dict>
+  <key>HardResourceLimits</key>
+  <dict>
+    <key>Core</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>@HOME@/Library/Logs/decisions-gateway/gateway.log</string>
+  <key>StandardErrorPath</key>
+  <string>@HOME@/Library/Logs/decisions-gateway/gateway.log</string>
+</dict>
+</plist>
